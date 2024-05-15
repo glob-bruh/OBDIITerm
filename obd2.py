@@ -1,5 +1,5 @@
-#import can as obdCan
-#from can.interface import Bus
+import can as obdCan
+from can.interface import Bus
 import time
 import os
 import binascii
