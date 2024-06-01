@@ -1,5 +1,4 @@
-import can as obdCan
-from can.interface import Bus
+
 import time
 import os
 import binascii
@@ -46,6 +45,71 @@ def readCANmsg(arbIDneeded, arbID, advancedOut):
         print(f"BUS FAILURE! Have you ran option 01 from menu? ({e}.)")
         return "?"
 
+def vinYearDecode(num): # supported until 2040
+    vinChars = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "P", "R", "S", "T", "V", "W", "X", "Y", "1", "2", "3", "4", "5", "6", "7", "8","9"]
+    yearCode = list(num)[9]
+    y = 0
+    for x in vinChars:
+        if x == yearCode:
+            break
+        else:
+            y += 1
+    return [(1980 + y), (2010 + y)]
+
+def vinCheckDigitCheck(num):
+    vinCharValue = [
+        ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "P", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "0", "1", "2", "3", "4", "5", "6", "7", "8","9"],
+        [ 1,   2,   3,   4,   5,   6,   7,   8,   1,   2,   3,   4,   5,   7,   9 ,  2,   3,   4,   5,   6,   7,   8,   9,   0,   1,   2,   3,   4,   5,   6,   7,   8,  9 ]
+    ]
+    vinPosWeight = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]
+    vinArr = list(num)
+    x = 0
+    final = 0
+    for y in vinArr:
+        xa = 0
+        for z in vinCharValue[0]:
+            if z == vinArr[x]:
+                result = vinCharValue[1][xa]
+                break
+            else:
+                xa += 1
+        final += (vinPosWeight[x] * result)
+        x += 1
+    checkDig = vinArr[8]
+    if str(final % 11) == checkDig:
+        return True
+    else:
+        return False
+
+def printVehicleVinStat(num):
+    print("""
+---===---
+1 = Offline Lookup        = Calculations performed locally (less info). 
+2 = Online Lookup (NHTSA) = Lookup VIN through NHTSA (more info).
+---===---
+    """)
+    x = int(input("Enter Choice: "))
+    if x == 1:
+        vehicleYear = vinYearDecode(vin)
+        checkStat = vinCheckDigitCheck(vin)
+        print(f"""
+------------------------
+Vehicle Stats (offline):
+------------------------
+VIN: {vin}.
+Year: {vehicleYear[0]} or {vehicleYear[1]}.
+Check Passed? {checkStat}.
+""")
+    elif x == 2:
+        print(f"online lookup for {num} here.")
+
+# import requests, json
+# def vinDataPull(num):
+#     returnedJson = json.loads(requests.get(f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/{num}?format=json").text)
+#     #print(returnedJson)
+#     print(returnedJson["Results"][7]["Value"])
+#     print(returnedJson["Results"][9]["Value"])
+
 print("""
 =====================================================================
 ================= GlobBruh OBD-II Interfacing Tool ==================
@@ -63,8 +127,9 @@ while True:
 [02]: Initialize OS (only run this per boot)
 --- General Tools ---
 [10]: SEND - Sends message
-[11]: READ - Repeats recieved/sent messages
+[11]: READ - Repeats received/sent messages
 [12]: TERM - Terminal mode
+[13]: VIN Lookup Tool
 --- Information Extractors ---
 [201] Get RPM (srv 01, pid 0C) - OneShot
 [202] Get RPM (srv 01, pid 0C) - Repeat
@@ -77,101 +142,120 @@ while True:
     """)
     initChoose = input("Select choice: ")
 
-    if initChoose == "10" or initChoose == "12":
-        if initChoose == "10":
-            print("SEND MODE:")
-        else:
-            print("TERMINAL MODE:")    
-        print("Enter 'leave' to leave this mode.")
-        while True:
-            msgDataStr = input("Type message DATA: ")
-            if msgDataStr == "scale":
-                print("SCALE SCALE SCALE: 123#45 67 89 01 23 45 67 89")
-            elif msgDataStr == "leave":
-                break
+    match initChoose:
+        case "01":
+            print("Import CAN modules...")
+            import can as obdCan
+            from can.interface import Bus
+            print("CAN config...")
+            obdCan.rc["interface"] = "socketcan"
+            obdCan.rc["channel"] = "vcan0"
+            obdCan.rc["bitrate"] = 500000
+            bus = Bus()
+            print("Done!")
+            continue
+        case "02":
+            print("OS config...")
+            interfaceToUse = input("Interface to use (eg: ttyUSB0): ")
+            os.system("sudo slcand -o -s6 -t hw -S 3000000 /dev/" + interfaceToUse + " vcan0")
+            os.system("ip link set up vcan0")
+            print("Done!")
+            continue
+        case "10" | "12":
+            if initChoose == "10":
+                print("SEND MODE:")
             else:
-                sendStat = sendCANmsg(msgDataStr)
-                if initChoose == "12" and sendStat == True:
-                    print("Returned DATA: " + str(readCANmsg(False, 0, False)))
-    elif initChoose == "11":
-        print("READ MODE:")
-        print("[!] You will need to press CTRL+C to exit this mode [!]")
-        try:
+                print("TERMINAL MODE:")    
+            print("Enter 'leave' to leave this mode.")
             while True:
-                print(readCANmsg(False, 0, False))
-        except KeyboardInterrupt:
-            pass
-    elif initChoose == "02":
-        print("OS config...")
-        interfaceToUse = input("Interface to use (eg: ttyUSB0): ")
-        os.system("sudo slcand -o -s6 -t hw -S 3000000 /dev/" + interfaceToUse + " vcan0")
-        os.system("ip link set up vcan0")
-        print("Done!")
-    elif initChoose == "01":
-        print("CAN config...")
-        obdCan.rc["interface"] = "socketcan"
-        obdCan.rc["channel"] = "vcan0"
-        obdCan.rc["bitrate"] = 500000
-        bus = Bus()
-        print("Done!")
-    elif initChoose == "30":
-        print("[!] You will need to press CTRL+C to exit this mode [!]")
-        timeinput = input("Time to wait between each SEND (ms): ")
-        print("SCALE SCALE SCALE: 123#45 67 89 01 23 45 67 89")
-        msgDataStr = input("Type message DATA: ")
-        while True:
-            time.sleep(int(timeinput) / 1000)
-            sendCANmsg(msgDataStr)
-            print(f"Sent -> {msgDataStr}")
-    elif initChoose == "31":
-        print("READ TO FILE:")
-        filename = input("Enter filename: ")
-        workingFile = open(filename, "a")
-        print("File Opened - Autosaving...")
-        print("Press CTRL+C to finish.")
-        try:
+                msgDataStr = input("Type message DATA: ")
+                if msgDataStr == "scale":
+                    print("SCALE SCALE SCALE: 123#45 67 89 01 23 45 67 89")
+                elif msgDataStr == "leave":
+                    break
+                else:
+                    sendStat = sendCANmsg(msgDataStr)
+                    if initChoose == "12" and sendStat == True:
+                        print("Returned DATA: " + str(readCANmsg(False, 0, False)))
+            continue
+        case "11":
+            print("READ MODE:")
+            print("[!] You will need to press CTRL+C to exit this mode [!]")
+            try:
+                while True:
+                    print(readCANmsg(False, 0, False))
+            except KeyboardInterrupt:
+                pass
+            continue
+        case "13":
+            vin = input("ENTER VIN: ").upper()
+            # vin = "JN3MS37A9PW202929" # example vin - found on AutoZone (93 Nissan 240SX)
+            printVehicleVinStat(vin)
+            continue
+        case "30":
+            print("[!] You will need to press CTRL+C to exit this mode [!]")
+            timeinput = input("Time to wait between each SEND (ms): ")
+            print("SCALE SCALE SCALE: 123#45 67 89 01 23 45 67 89")
+            msgDataStr = input("Type message DATA: ")
             while True:
-                returned = readCANmsg(False, 0, False)
-                print(returned)
-                curTime = time.localtime(time.time())
-                workingFile.write(f"{curTime.tm_hour}:{curTime.tm_min}:{curTime.tm_sec} => {returned}\n")
-        except KeyboardInterrupt:
-            workingFile.close()
-            print("File Close - Save Successful!")
-            pass
-    elif initChoose == "201":
-        sendCANmsg("7DF#02 01 0C 00 00 00 00 00")
-        returned = readCANmsg(True, "7e8", False)
-        rpmValue = ((256 * int(returned[4], 16)) + int(returned[5], 16)) / 4
-        print("The vehicles current RPM is: " + str(rpmValue))
-    elif initChoose == "202":
-        try:
-            print("Press CTRL+C to exit.")
-            while True:
-                sendCANmsg("7DF#02 01 0C 00 00 00 00 00")
-                returned = readCANmsg(True, "7e8", False)
-                rpmValue = ((256 * int(returned[4], 16)) + int(returned[5], 16)) / 4
-                print("                                             ", end='\r')
-                print("The vehicles current RPM is: " + str(rpmValue), end='\r')
-                time.sleep(0.35)
-        except KeyboardInterrupt:
-            pass
-    elif initChoose == "211":
-        try:
-            print("Press CTRL+C to exit.")
-            while True:
-                sendCANmsg("7DF#02 01 2F 00 00 00 00 00")
-                returned = readCANmsg(True, "7e8", False)
-                rpmValue = (100 * 255) / int(returned[4], 16)
-                print("                                                 ", end='\r')
-                print("The vehicles Fuel Tank Level is: " + str(rpmValue), end='\r')
-                time.sleep(0.35)
-        except KeyboardInterrupt:
-            pass
-    elif initChoose == "exit" or initChoose == "X":
-        print("Shutdown bus...")
-        bus.shutdown()
-        print("Done exiting!")
-        exit()
-    else:
-        print("This is not a valid selection.")
+                time.sleep(int(timeinput) / 1000)
+                sendCANmsg(msgDataStr)
+                print(f"Sent -> {msgDataStr}")
+            continue
+        case "31":
+            print("READ TO FILE:")
+            filename = input("Enter filename: ")
+            workingFile = open(filename, "a")
+            print("File Opened - Autosaving...")
+            print("Press CTRL+C to finish.")
+            try:
+                while True:
+                    returned = readCANmsg(False, 0, False)
+                    print(returned)
+                    curTime = time.localtime(time.time())
+                    workingFile.write(f"{curTime.tm_hour}:{curTime.tm_min}:{curTime.tm_sec} => {returned}\n")
+            except KeyboardInterrupt:
+                workingFile.close()
+                print("File Close - Save Successful!")
+                pass
+            continue
+        case "201":
+            sendCANmsg("7DF#02 01 0C 00 00 00 00 00")
+            returned = readCANmsg(True, "7e8", False)
+            rpmValue = ((256 * int(returned[4], 16)) + int(returned[5], 16)) / 4
+            print("The vehicles current RPM is: " + str(rpmValue))
+            continue
+        case "202":
+            try:
+                print("Press CTRL+C to exit.")
+                while True:
+                    sendCANmsg("7DF#02 01 0C 00 00 00 00 00")
+                    returned = readCANmsg(True, "7e8", False)
+                    rpmValue = ((256 * int(returned[4], 16)) + int(returned[5], 16)) / 4
+                    print("                                             ", end='\r')
+                    print("The vehicles current RPM is: " + str(rpmValue), end='\r')
+                    time.sleep(0.35)
+            except KeyboardInterrupt:
+                pass
+            continue
+        case "211":
+            try:
+                print("Press CTRL+C to exit.")
+                while True:
+                    sendCANmsg("7DF#02 01 2F 00 00 00 00 00")
+                    returned = readCANmsg(True, "7e8", False)
+                    rpmValue = (100 * 255) / int(returned[4], 16)
+                    print("                                                 ", end='\r')
+                    print("The vehicles Fuel Tank Level is: " + str(rpmValue), end='\r')
+                    time.sleep(0.35)
+            except KeyboardInterrupt:
+                pass
+            continue
+        case "exit" | "X":
+            print("Shutdown bus...")
+            bus.shutdown()
+            print("Done exiting!")
+            exit()
+            continue
+        case _:
+            print("This is not a valid selection.")
