@@ -87,6 +87,15 @@ def vinCheckDigitCheck(num):
     else:
         return False
 
+def vinNHTSAGetInfo(num):
+    x = requests.get(f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/{num}?format=json").text
+    return json.loads(x)
+
+def vinNHTSAJsonFind(variable, jsonOut):
+    for x in jsonOut["Results"]:
+        if x["Variable"] == variable:
+            return x["Value"]
+
 def vinPrintVehicleStat(num):
     printMulti("""
     ---===---
@@ -96,35 +105,37 @@ def vinPrintVehicleStat(num):
     """)
     x = int(input("Enter Choice: "))
     if x == 1:
-        vehicleYear = vinYearDecode(vin)
-        checkStat = vinCheckDigitCheck(vin)
-        vinSerial = "".join(list(vin)[11:17])
+        vehicleYear = vinYearDecode(num)
+        checkStat = vinCheckDigitCheck(num)
+        vinSerial = "".join(list(num)[11:17])
         printMulti(f"""
         ------------------------
         Vehicle Stats (offline):
         ------------------------
-        VIN: {vin}.
+        VIN:                {num}.
         Check digit passed? {checkStat}.
-        Year: {vehicleYear[0]} or {vehicleYear[1]}.
-        Serial number: {vinSerial}.
+        Year:               {vehicleYear[0]} or {vehicleYear[1]}.
+        Serial number:      {vinSerial}.
         """)
     elif x == 2:
-        apiData = requests.get(f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/{num}?format=json").text
-        apiJson = json.loads(apiData)
+        apiJson = vinNHTSAGetInfo(num)
         printMulti(f"""
         -----------------------
         Vehicle Stats (online):
         -----------------------
         {apiJson["Message"]}
         -----------------------
-        VIN: {vin}.
-        Manufacture: {apiJson["Results"][8]["Value"]}.
-        Model: {apiJson["Results"][7]["Value"]} {apiJson["Results"][9]["Value"]}.
-        Check digit passed? {apiJson["Results"][4]["Value"]}.
-        Year: {apiJson["Results"][10]["Value"]}.
-        Engine Model: {apiJson["Results"][75]["Value"]}.
-        Primary Fuel Type: {apiJson["Results"][77]["Value"]}.
-        Doors: {apiJson["Results"][24]["Value"]}.
+        VIN:                {num}.
+        Manufacture:        {vinNHTSAJsonFind("Manufacturer Name", apiJson)}.
+        Model:              {vinNHTSAJsonFind("Make", apiJson)} {vinNHTSAJsonFind("Model", apiJson)}.
+        Check digit passed? {vinNHTSAJsonFind("Error Text", apiJson)}.
+        Year:               {vinNHTSAJsonFind("Model Year", apiJson)}.
+        Plant:              {vinNHTSAJsonFind("Plant Company Name", apiJson)} > {vinNHTSAJsonFind("Plant City", apiJson)} > {vinNHTSAJsonFind("Plant State", apiJson)} > {vinNHTSAJsonFind("Plant Country", apiJson)}.
+        Engine Model:       {vinNHTSAJsonFind("Engine Model", apiJson)}.
+        Primary Fuel Type:  {vinNHTSAJsonFind("Fuel Type - Primary", apiJson)}.
+        Turbo:              {vinNHTSAJsonFind("Turbo", apiJson)}.
+        Body Class:         {vinNHTSAJsonFind("Body Class", apiJson)}.
+        Doors:              {vinNHTSAJsonFind("Doors", apiJson)}.
         """)
 
 print("""
