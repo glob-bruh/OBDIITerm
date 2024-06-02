@@ -2,6 +2,12 @@
 import time
 import os
 import binascii
+import requests
+import json
+from textwrap import dedent
+
+def printMulti(txt):
+    print(dedent(txt))
 
 def sendCANmsg(msgStringIn):
     try:
@@ -81,34 +87,45 @@ def vinCheckDigitCheck(num):
     else:
         return False
 
-def printVehicleVinStat(num):
-    print("""
----===---
-1 = Offline Lookup        = Calculations performed locally (less info). 
-2 = Online Lookup (NHTSA) = Lookup VIN through NHTSA (more info).
----===---
+def vinPrintVehicleStat(num):
+    printMulti("""
+    ---===---
+    1 = Offline Lookup = Calculations performed locally (less info). 
+    2 = Online Lookup  = Lookup VIN through NHTSA API (more info).
+    ---===---
     """)
     x = int(input("Enter Choice: "))
     if x == 1:
         vehicleYear = vinYearDecode(vin)
         checkStat = vinCheckDigitCheck(vin)
-        print(f"""
-------------------------
-Vehicle Stats (offline):
-------------------------
-VIN: {vin}.
-Year: {vehicleYear[0]} or {vehicleYear[1]}.
-Check Passed? {checkStat}.
-""")
+        vinSerial = "".join(list(vin)[11:17])
+        printMulti(f"""
+        ------------------------
+        Vehicle Stats (offline):
+        ------------------------
+        VIN: {vin}.
+        Check digit passed? {checkStat}.
+        Year: {vehicleYear[0]} or {vehicleYear[1]}.
+        Serial number: {vinSerial}.
+        """)
     elif x == 2:
-        print(f"online lookup for {num} here.")
-
-# import requests, json
-# def vinDataPull(num):
-#     returnedJson = json.loads(requests.get(f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/{num}?format=json").text)
-#     #print(returnedJson)
-#     print(returnedJson["Results"][7]["Value"])
-#     print(returnedJson["Results"][9]["Value"])
+        apiData = requests.get(f"https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/{num}?format=json").text
+        apiJson = json.loads(apiData)
+        printMulti(f"""
+        -----------------------
+        Vehicle Stats (online):
+        -----------------------
+        {apiJson["Message"]}
+        -----------------------
+        VIN: {vin}.
+        Manufacture: {apiJson["Results"][8]["Value"]}.
+        Model: {apiJson["Results"][7]["Value"]} {apiJson["Results"][9]["Value"]}.
+        Check digit passed? {apiJson["Results"][4]["Value"]}.
+        Year: {apiJson["Results"][10]["Value"]}.
+        Engine Model: {apiJson["Results"][75]["Value"]}.
+        Primary Fuel Type: {apiJson["Results"][77]["Value"]}.
+        Doors: {apiJson["Results"][24]["Value"]}.
+        """)
 
 print("""
 =====================================================================
@@ -120,25 +137,25 @@ print("""
 """)
 
 while True:
-    print("""
-=== MAIN MENU ===
---- Initialization Tools ---
-[01]: Initialize CAN (run every script start)
-[02]: Initialize OS (only run this per boot)
---- General Tools ---
-[10]: SEND - Sends message
-[11]: READ - Repeats received/sent messages
-[12]: TERM - Terminal mode
-[13]: VIN Lookup Tool
---- Information Extractors ---
-[201] Get RPM (srv 01, pid 0C) - OneShot
-[202] Get RPM (srv 01, pid 0C) - Repeat
-[211] Get Fuel Tank Level (srv 01, pid 2F) - Repeat
---- Development Tools ---
-[30]: Code Spammer
-[31]: Read to file
---- Other ---
-[eXit]: Safely Exit
+    printMulti("""
+    === MAIN MENU ===
+    --- Initialization Tools ---
+    [01]: Initialize CAN (run every script start)
+    [02]: Initialize OS (only run this per boot)
+    --- General Tools ---
+    [10]: SEND - Sends message
+    [11]: READ - Repeats received/sent messages
+    [12]: TERM - Terminal mode
+    [13]: VIN Lookup Tool
+    --- Information Extractors ---
+    [201] Get RPM (srv 01, pid 0C) - OneShot
+    [202] Get RPM (srv 01, pid 0C) - Repeat
+    [211] Get Fuel Tank Level (srv 01, pid 2F) - Repeat
+    --- Development Tools ---
+    [30]: Code Spammer
+    [31]: Read to file
+    --- Other ---
+    [eXit]: Safely Exit
     """)
     initChoose = input("Select choice: ")
 
@@ -156,7 +173,12 @@ while True:
             continue
         case "02":
             print("OS config...")
-            interfaceToUse = input("Interface to use (eg: ttyUSB0): ")
+            while True:
+                interfaceToUse = input("Interface to use (eg: ttyUSB0, 'find' to see USB devices): ")
+                if interfaceToUse == "find":
+                    os.system("lsusb -v | grep 'Bus\|iManufacturer\|iProduct\|iSerial' | less")
+                else:
+                    break
             os.system("sudo slcand -o -s6 -t hw -S 3000000 /dev/" + interfaceToUse + " vcan0")
             os.system("ip link set up vcan0")
             print("Done!")
@@ -188,9 +210,17 @@ while True:
                 pass
             continue
         case "13":
+            printMulti("""
+            ***********
+            VIN LOOKUP:
+            ***********
+            Enter 'example' to use example VIN (93 Nissan 240SX, from AutoZone).
+            """)
             vin = input("ENTER VIN: ").upper()
-            # vin = "JN3MS37A9PW202929" # example vin - found on AutoZone (93 Nissan 240SX)
-            printVehicleVinStat(vin)
+            if vin == "EXAMPLE":
+                print("Using example VIN!")
+                vin = "JN3MS37A9PW202929"
+            vinPrintVehicleStat(vin)
             continue
         case "30":
             print("[!] You will need to press CTRL+C to exit this mode [!]")
