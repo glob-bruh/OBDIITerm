@@ -23,6 +23,11 @@ All other dependencies used in `obd2_Base` should already be included with a def
 
 ### GUI:
 
+<table><tr>
+<td><img src="./docs/img/pic2.png"></td>
+<td><img src="./docs/img/pic1.png"></td>
+</tr></table>
+
 1) Install [Streamlit](https://docs.streamlit.io/get-started/installation).
 2) Perform CLI install.
 

@@ -1,6 +1,13 @@
 ## How to use the GUI:
 
 <table>
+<tr>
+<td><img src="./img/pic2.png"></td>
+<td><img src="./img/pic1.png"></td>
+</tr>
+</table>
+
+<table>
 <tr><th>Tab</th><th>What does it do?</th></tr>
 
 <tr><td><pre>ConfigConnect</pre></td><td><pre>
